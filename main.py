@@ -1,110 +1,80 @@
-# Interactive CRUD for the 'cities' table (DB name also 'cities')
-# Uses the connection helper from db.py (same folder).
 from db import get_cursor
 
-UA_CITIES = [
-    "Kyiv", "Kharkiv", "Odesa", "Dnipro", "Zaporizhzhia",
-    "Lviv", "Kryvyi Rih", "Mykolaiv", "Mariupol", "Vinnytsia",
-    "Poltava", "Chernihiv", "Khmelnytskyi", "Cherkasy", "Sumy",
-    "Zhytomyr", "Rivne", "Ivano-Frankivsk", "Ternopil", "Uzhhorod"
-]
-
-DDL_CREATE = """
-CREATE TABLE IF NOT EXISTS cities (
-    id SERIAL PRIMARY KEY,
-    city_name TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-"""
+BASE_CITIES_4 = ["Kyiv", "Lviv", "Odesa", "Kharkiv"]
+NEW_CITY = "Dnipro"
+RENAME_FROM = "Odesa"
+RENAME_TO = "Odesa (updated)"
+DELETE_CITY = "Lviv"
+ADD_BACK_CITY = "Lviv"
 
 def ensure_table():
     with get_cursor(commit=True) as cur:
-        cur.execute(DDL_CREATE)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS cities (
+                id SERIAL PRIMARY KEY,
+                city_name TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
 
-def reset_and_seed():
-    """Empty the table and insert exactly 20 Ukrainian city names."""
-    values = [(name,) for name in UA_CITIES]
+def truncate():
     with get_cursor(commit=True) as cur:
-        cur.execute(DDL_CREATE)
         cur.execute("TRUNCATE TABLE cities RESTART IDENTITY;")
-        cur.executemany("INSERT INTO cities (city_name) VALUES (%s)", values)
 
-def show_all():
+def seed_4():
+    with get_cursor(commit=True) as cur:
+        cur.executemany("INSERT INTO cities (city_name) VALUES (%s)", [(c,) for c in BASE_CITIES_4])
+
+def add_city(name):
+    with get_cursor(commit=True) as cur:
+        cur.execute("INSERT INTO cities (city_name) VALUES (%s) ON CONFLICT (city_name) DO NOTHING", (name,))
+
+def rename_city(old, new):
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE cities SET city_name=%s WHERE city_name=%s", (new, old))
+
+def delete_city(name):
+    with get_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM cities WHERE city_name=%s", (name,))
+
+def rows():
     with get_cursor() as cur:
-        cur.execute("SELECT id, city_name, created_at FROM cities ORDER BY id;")
+        cur.execute("SELECT id, city_name FROM cities ORDER BY id")
         return cur.fetchall()
 
-def select_by_name(name: str):
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT id, city_name, created_at FROM cities WHERE city_name = %s;",
-            (name,),
-        )
-        return cur.fetchall()
+def print_rows(title):
+    print(f"\n{title}")
+    data = rows()
+    for r in data:
+        print(f"{r['id']:>2}  {r['city_name']}")
+    print(f"Total rows: {len(data)}")
 
-def update_id1(new_name: str = "Kyiv (updated)"):
-    with get_cursor(commit=True) as cur:
-        cur.execute("UPDATE cities SET city_name = %s WHERE id = 1;", (new_name,))
-        return cur.rowcount
+def press(msg):
+    input(msg)
 
-def delete_by_name(name: str):
-    with get_cursor(commit=True) as cur:
-        cur.execute("DELETE FROM cities WHERE city_name = %s;", (name,))
-        return cur.rowcount
+def main():
+    ensure_table()
 
-def menu():
-    while True:
-        print("\n=== MENU (DB = cities, table = cities) ===")
-        print("1. Ensure table (create if missing)")
-        print("2. Reset table and insert 20 Ukrainian city names")
-        print("3. Show all cities")
-        print("4. Find a city by name")
-        print("5. Update city name of row with id=1")
-        print("6. Delete a city by name")
-        print("0. Exit")
+    press("Press Enter to FILL the database (4 base cities)...")
+    truncate()
+    seed_4()
+    print_rows("After seed (4 rows)")
 
-        choice = input("Enter choice: ").strip()
+    press(f"Press Enter to ADD a new city: {NEW_CITY} ...")
+    add_city(NEW_CITY)
+    print_rows("After add (5 rows)")
 
-        if choice == "1":
-            ensure_table()
-            print("✅ Table ensured.")
-        elif choice == "2":
-            reset_and_seed()
-            print("✅ Seeded 20 city names.")
-            for r in show_all():
-                print(r)
-        elif choice == "3":
-            rows = show_all()
-            if not rows:
-                print("(empty)")
-            else:
-                for r in rows:
-                    print(r)
-        elif choice == "4":
-            name = input("City name: ").strip()
-            rows = select_by_name(name)
-            if not rows:
-                print(f"(no rows for '{name}')")
-            else:
-                for r in rows:
-                    print(r)
-        elif choice == "5":
-            new_name = input("New name for id=1 (default 'Kyiv (updated)'): ").strip() or "Kyiv (updated)"
-            n = update_id1(new_name)
-            print(f"Rows updated: {n}")
-            for r in show_all():
-                print(r)
-        elif choice == "6":
-            name = input("City name to delete: ").strip()
-            n = delete_by_name(name)
-            print(f"Rows deleted: {n}")
-            for r in show_all():
-                print(r)
-        elif choice == "0":
-            print("bye 👋")
-            break
-        else:
-            print("Invalid choice. Try again.")
+    press(f"Press Enter to RENAME city '{RENAME_FROM}' -> '{RENAME_TO}' ...")
+    rename_city(RENAME_FROM, RENAME_TO)
+    print_rows("After rename")
+
+    press(f"Press Enter to DELETE city '{DELETE_CITY}' ...")
+    delete_city(DELETE_CITY)
+    print_rows("After delete (4 rows)")
+
+    press(f"Press Enter to ADD BACK city '{ADD_BACK_CITY}' ...")
+    add_city(ADD_BACK_CITY)
+    print_rows("After add back (5 rows)")
 
 if __name__ == "__main__":
-    menu()
+    main()
