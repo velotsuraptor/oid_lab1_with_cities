@@ -1,5 +1,3 @@
-
-# Minimal connection helper, prompts password once per session
 import os, getpass, psycopg2, psycopg2.extras
 from contextlib import contextmanager
 
